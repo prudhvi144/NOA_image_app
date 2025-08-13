@@ -1,0 +1,8 @@
+# Build requirements for Sperm Verification App
+pyinstaller>=6.0.0
+PySide6>=6.5.0
+Pillow>=9.0.0
+numpy>=1.21.0
+pandas>=1.3.0
+openpyxl>=3.0.0
+pathlib2>=2.3.0  # For Python 3.6 compatibility if needed
