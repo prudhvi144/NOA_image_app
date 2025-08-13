@@ -1,0 +1,36 @@
+🚀 SPERM VERIFICATION APP - QUICK START GUIDE
+
+===========================================
+
+🖥️ HOW TO RUN:
+• Mac: Open "Mac" folder → Double-click "SpermVerificationApp.app"
+• Windows: Open "Windows" folder → Double-click "SpermVerificationApp.exe"
+
+📁 STEP-BY-STEP INSTRUCTIONS:
+
+1. RUN THE APP (see above)
+
+2. LOAD DATA:
+   • Click "🔬 Load Data"
+   • First dialog: Open the "Data" folder → Select "keyence_vs_cephla_keyence" folder → Click Open
+   • Second dialog: Select "reclassified_pred_fixed.json" file → Click Open
+
+3. START ANNOTATING:
+   • Click "🚀 Start Session" button
+   • Click on sperm thumbnails to confirm/unconfirm (green = confirmed)
+   • Hover over thumbnails to see full image with bounding box
+
+4. SESSION CONTROLS:
+   • Pause: Click "⏸️ Pause" (blurs images)
+   • Resume: Click "▶️ Resume" 
+   • Stop: Click "🛑 Stop & Export" (saves results to Excel file)
+
+5. FINISH:
+   • After exporting, click "🗑️ Clear All" to reset
+   • Close the app
+
+===========================================
+
+That's it! Same process for both Mac and Windows users.
+
+Version 1.0 | Built with Python & PySide6

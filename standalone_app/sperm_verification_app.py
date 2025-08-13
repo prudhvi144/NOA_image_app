@@ -1391,12 +1391,16 @@ class SpermVerificationApp(QMainWindow):
 
 
 def get_app_directory():
-    """Get the directory where the app should start from (user's current directory)"""
+    """Get the directory where the app executable is located"""
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle - use current working directory
-        current_dir = Path.cwd()
-        print(f"📦 Running as bundled app, using current directory: {current_dir}")
-        return current_dir
+        # Running as PyInstaller bundle - use executable's directory
+        if sys.platform == 'darwin':  # macOS
+            # For .app bundles, go up to the directory containing the .app
+            app_path = Path(sys.executable).parent.parent.parent  # Contents/MacOS → Contents → App.app → parent
+        else:  # Windows
+            app_path = Path(sys.executable).parent
+        print(f"📦 Running as bundled app from: {app_path}")
+        return app_path
     else:
         # Running as script - project root directory for development
         script_dir = Path(__file__).parent.absolute()  # standalone_app directory
