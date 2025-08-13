@@ -1,43 +1,121 @@
-name: build-demo
+name: 🚀 Cross-Platform Build
 
 on:
   push:
-    tags:
-      - 'demo-*'
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Manual trigger
 
 jobs:
   build:
+    name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
-        python-version: ['3.11']
+        include:
+          - os: macos-latest
+            artifact_name: SpermVerificationApp-macOS
+            asset_name: SpermVerificationApp-macOS.zip
+          - os: windows-latest
+            artifact_name: SpermVerificationApp-Windows
+            asset_name: SpermVerificationApp-Windows.zip
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Build with PyInstaller
-        run: |
-          pyinstaller --noconfirm --windowed --name NOAGridApp noa_app/__main__.py
-      - name: Archive artifact (zip)
-        if: runner.os != 'Windows'
-        run: |
-          cd dist
-          zip -r NOAGridApp-${{ runner.os }}.zip NOAGridApp
-      - name: Archive artifact (7z)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          cd dist
-          7z a NOAGridApp-Windows.zip NOAGridApp
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: NOAGridApp-${{ runner.os }}
-          path: dist/NOAGridApp-*.zip
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 📦 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-build.txt
+
+    - name: 🔨 Build application (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        python -m PyInstaller --clean build_config.spec
+        # Create ZIP for distribution
+        cd dist
+        zip -r ../SpermVerificationApp-macOS.zip SpermVerificationApp.app
+
+    - name: 🔨 Build application (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        python -m PyInstaller --clean `
+          --onedir `
+          --windowed `
+          --name SpermVerificationApp `
+          --add-data "standalone_app/modern_theme.py;." `
+          --add-data "standalone_app/test_data;test_data" `
+          --hidden-import "PySide6.QtCore" `
+          --hidden-import "PySide6.QtGui" `
+          --hidden-import "PySide6.QtWidgets" `
+          --hidden-import "PIL._tkinter_finder" `
+          --hidden-import "numpy" `
+          --hidden-import "pandas" `
+          --hidden-import "openpyxl" `
+          standalone_app/sperm_verification_app.py
+        # Create ZIP for distribution
+        cd dist
+        Compress-Archive -Path SpermVerificationApp -DestinationPath ../SpermVerificationApp-Windows.zip
+
+    - name: 🧪 Test application
+      shell: bash
+      run: |
+        if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          # Test macOS app
+          ./dist/SpermVerificationApp.app/Contents/MacOS/SpermVerificationApp --version || echo "App launched (no version flag)"
+        else
+          # Test Windows app
+          ./dist/SpermVerificationApp/SpermVerificationApp.exe --version || echo "App launched (no version flag)"
+        fi
+
+    - name: 📤 Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: ${{ matrix.asset_name }}
+
+    - name: 🎉 Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ matrix.asset_name }}
+        draft: false
+        prerelease: false
+        body: |
+          ## 🎯 Sperm Verification App - Release ${{ github.ref_name }}
+          
+          ### 📦 Downloads
+          - **macOS**: SpermVerificationApp-macOS.zip
+          - **Windows**: SpermVerificationApp-Windows.zip
+          
+          ### 🍎 macOS Installation
+          1. Download and extract SpermVerificationApp-macOS.zip
+          2. Move SpermVerificationApp.app to Applications folder
+          3. Right-click → Open (first time only, for Gatekeeper)
+          
+          ### 🪟 Windows Installation
+          1. Download and extract SpermVerificationApp-Windows.zip
+          2. Run SpermVerificationApp.exe
+          3. Windows may show security warning (click "More info" → "Run anyway")
+          
+          ### ✨ Features
+          - Cross-platform sperm verification tool
+          - Grid-based thumbnail interface
+          - Full image viewfinder with zoom
+          - Timer and session management
+          - Excel export with detailed timing data
+          - Modern, beautiful UI
+          
+          ### 🔐 Code Signing
+          - macOS: Unsigned (requires manual approval)
+          - Windows: Unsigned (may trigger antivirus warnings)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

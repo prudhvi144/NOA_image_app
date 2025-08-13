@@ -103,8 +103,8 @@ class MainWindow(QMainWindow):
 		self.overlay.raise_()
 
 		# Timer state
-        self.session_started: Optional[datetime] = None
-        self.session_paused_at: Optional[datetime] = None
+		self.session_started: Optional[datetime] = None
+		self.session_paused_at: Optional[datetime] = None
 		self.total_paused = timedelta(0)
 		self.timer = QTimer(self)
 		self.timer.timeout.connect(self._tick)
