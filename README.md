@@ -1,28 +1,28 @@
 # NOA Grid App
 
-Standalone reviewer for detections produced by a DNN. Cross-platform (macOS/Windows). Offline.
+Standalone reviewer for detections produced by a DNN. Cross-platform (macOS/Windows/Linux). Offline.
 
-## Setup
-
-- Python 3.11 recommended.
-- Create venv and install deps:
+## Setup (dev)
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-## Run (dev)
-
-```bash
 python -m noa_app
 ```
 
-## Package
+## Packaging (local)
 
 ```bash
 pyinstaller --noconfirm --windowed --name NOAGridApp noa_app/__main__.py
 ```
 
-Artifacts in `dist/NOAGridApp`.
+## CI Demo Builds
+
+- Push a tag starting with `demo-` to trigger cross-platform builds.
+- Artifacts will appear in the GitHub Actions run as downloadable zips.
+
+```bash
+git tag demo-0.1.0
+git push origin demo-0.1.0
+```
