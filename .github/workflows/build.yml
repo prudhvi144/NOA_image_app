@@ -24,6 +24,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgl1 \
+            libegl1 \
+            libglx-mesa0 \
+            libopengl0 \
+            libglu1-mesa \
             libxkbcommon-x11-0 \
             libxcb-xinerama0 \
             libxcb-cursor0 \
@@ -83,6 +87,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libgl1 \
+            libegl1 \
+            libglx-mesa0 \
+            libopengl0 \
+            libglu1-mesa \
             libxkbcommon-x11-0 \
             libxcb-xinerama0 \
             libxcb-cursor0 \
