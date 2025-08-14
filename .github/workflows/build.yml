@@ -1,4 +1,4 @@
-name: build-demo
+name: build-standalone
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
       - 'demo-*'
 
 jobs:
-  build:
+  compat:
+    name: Compatibility check
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -14,30 +15,128 @@ jobs:
         python-version: ['3.11']
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Build with PyInstaller
+      - name: Headless import checks
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: |
-          pyinstaller --noconfirm --windowed --name NOAGridApp noa_app/__main__.py
+          python - <<'PY'
+          import sys
+          import platform
+          print('Python', sys.version)
+          print('Platform', platform.platform())
+          # core deps
+          import PySide6
+          from PySide6.QtWidgets import QApplication
+          import PIL, numpy, pandas, openpyxl
+          # app imports
+          from pathlib import Path
+          sys.path.insert(0, str(Path('standalone_app').absolute()))
+          import run_app
+          print('Imports OK')
+          PY
+
+  build:
+    name: Build installers
+    needs: compat
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-13, windows-2022]
+        python-version: ['3.11']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pyinstaller \
+            --noconfirm --windowed \
+            --name SpermVerificationApp \
+            --collect-all PySide6 \
+            --collect-all PIL \
+            standalone_app/run_app.py
+
+      - name: Code sign (Windows)
+        if: runner.os == 'Windows' && env.WIN_CERT_PFX && env.WIN_CERT_PASSWORD
+        shell: bash
+        env:
+          WIN_CERT_PFX: ${{ secrets.WIN_CERT_PFX }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+        run: |
+          echo "$WIN_CERT_PFX" | base64 -d > code_sign.pfx
+          powershell -Command "& {\
+            Set-StrictMode -Version Latest; \
+            $ErrorActionPreference='Stop'; \
+            $exe = 'dist/SpermVerificationApp/SpermVerificationApp.exe'; \
+            & 'C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64/signtool.exe' sign \
+              /f code_sign.pfx /p $Env:WIN_CERT_PASSWORD \
+              /tr http://timestamp.sectigo.com /td sha256 /fd sha256 \
+              $exe \
+          }"
+
+      - name: Code sign + Notarize (macOS)
+        if: runner.os == 'macOS' && env.MACOS_CERT_P12 && env.MACOS_CERT_PASSWORD && env.MACOS_ID && env.MACOS_TEAM_ID && env.MACOS_NOTARY_APPLE_ID && env.MACOS_NOTARY_PASSWORD
+        shell: bash
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          MACOS_ID: ${{ secrets.MACOS_DEVELOPER_ID_APP }}
+          MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+        run: |
+          set -euo pipefail
+          APP="dist/SpermVerificationApp.app"
+          KEYCHAIN=build.keychain
+          echo "$MACOS_CERT_P12" | base64 -d > cert.p12
+          security create-keychain -p temp "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p temp "$KEYCHAIN"
+          security import cert.p12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k temp "$KEYCHAIN"
+          codesign --deep --force --options runtime --sign "$MACOS_ID" "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" SpermVerificationApp.zip
+          xcrun notarytool submit SpermVerificationApp.zip --apple-id "$MACOS_NOTARY_APPLE_ID" --password "$MACOS_NOTARY_PASSWORD" --team-id "$MACOS_TEAM_ID" --wait
+          xcrun stapler staple "$APP"
+
       - name: Archive artifact (zip)
         if: runner.os != 'Windows'
         run: |
           cd dist
-          zip -r NOAGridApp-${{ runner.os }}.zip NOAGridApp
+          if [ -d SpermVerificationApp.app ]; then \
+            ditto -c -k --sequesterRsrc --keepParent SpermVerificationApp.app SpermVerificationApp-macOS.zip; \
+          else \
+            zip -r SpermVerificationApp-${{ runner.os }}.zip SpermVerificationApp; \
+          fi
+
       - name: Archive artifact (7z)
         if: runner.os == 'Windows'
         shell: bash
         run: |
           cd dist
-          7z a NOAGridApp-Windows.zip NOAGridApp
+          7z a SpermVerificationApp-Windows.zip SpermVerificationApp
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NOAGridApp-${{ runner.os }}
-          path: dist/NOAGridApp-*.zip
+          name: SpermVerificationApp-${{ runner.os }}
+          path: |
+            dist/SpermVerificationApp-*.zip
+            dist/SpermVerificationApp-macOS.zip
