@@ -66,15 +66,18 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
+          # Ensure we are using project root requirements
+          pip install -r requirements.txt
           pyinstaller \
             --noconfirm --windowed \
             --name SpermVerificationApp \
+            --hidden-import PySide6.QtNetwork \
             --collect-all PySide6 \
             --collect-all PIL \
             standalone_app/run_app.py
 
       - name: Code sign (Windows)
-        if: runner.os == 'Windows' && env.WIN_CERT_PFX && env.WIN_CERT_PASSWORD
+        if: ${{ runner.os == 'Windows' && secrets.WIN_CERT_PFX != '' && secrets.WIN_CERT_PASSWORD != '' }}
         shell: bash
         env:
           WIN_CERT_PFX: ${{ secrets.WIN_CERT_PFX }}
@@ -92,7 +95,7 @@ jobs:
           }"
 
       - name: Code sign + Notarize (macOS)
-        if: runner.os == 'macOS' && env.MACOS_CERT_P12 && env.MACOS_CERT_PASSWORD && env.MACOS_ID && env.MACOS_TEAM_ID && env.MACOS_NOTARY_APPLE_ID && env.MACOS_NOTARY_PASSWORD
+        if: ${{ runner.os == 'macOS' && secrets.MACOS_CERT_P12 != '' && secrets.MACOS_CERT_PASSWORD != '' && secrets.MACOS_DEVELOPER_ID_APP != '' && secrets.MACOS_TEAM_ID != '' && secrets.MACOS_NOTARIZATION_APPLE_ID != '' && secrets.MACOS_NOTARIZATION_PASSWORD != '' }}
         shell: bash
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
