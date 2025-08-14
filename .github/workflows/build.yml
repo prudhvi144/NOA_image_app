@@ -1,4 +1,4 @@
-name: build-standalone
+name: Windows and Ubuntu demos
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
+        os: [ubuntu-22.04, windows-2022]
         python-version: ['3.11']
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-13, windows-2022]
+        os: [ubuntu-22.04, windows-2022]
         python-version: ['3.11']
     env:
       # Expose secrets as env so we can check env.* in if conditions

@@ -1,0 +1,94 @@
+name: Mac demo
+
+on:
+  push:
+    tags:
+      - 'demo-mac-*'
+
+jobs:
+  compat:
+    name: Compatibility check (macOS)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Headless import checks
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python - <<'PY'
+          import sys, platform
+          print('Python', sys.version)
+          print('Platform', platform.platform())
+          import PySide6
+          from PySide6.QtWidgets import QApplication
+          import PIL, numpy, pandas, openpyxl
+          from pathlib import Path
+          sys.path.insert(0, str(Path('standalone_app').absolute()))
+          import run_app
+          print('Imports OK')
+          PY
+
+  build:
+    name: Build installer (macOS)
+    needs: compat
+    runs-on: macos-13
+    env:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      MACOS_DEVELOPER_ID_APP: ${{ secrets.MACOS_DEVELOPER_ID_APP }}
+      MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
+      MACOS_NOTARIZATION_APPLE_ID: ${{ secrets.MACOS_NOTARIZATION_APPLE_ID }}
+      MACOS_NOTARIZATION_PASSWORD: ${{ secrets.MACOS_NOTARIZATION_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up venv
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pip install 'numpy<2' || true
+      - name: Build with PyInstaller
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          source .venv/bin/activate
+          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp --hidden-import PySide6.QtNetwork --collect-all PySide6 --collect-all PIL standalone_app/run_app.py
+      - name: Code sign + Notarize (macOS)
+        if: ${{ env.MACOS_CERT_P12 != '' && env.MACOS_CERT_PASSWORD != '' && env.MACOS_DEVELOPER_ID_APP != '' && env.MACOS_TEAM_ID != '' && env.MACOS_NOTARIZATION_APPLE_ID != '' && env.MACOS_NOTARIZATION_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          APP="dist/SpermVerificationApp.app"
+          KEYCHAIN=build.keychain
+          echo "$MACOS_CERT_P12" | base64 -d > cert.p12
+          security create-keychain -p temp "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p temp "$KEYCHAIN"
+          security import cert.p12 -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k temp "$KEYCHAIN"
+          codesign --deep --force --options runtime --sign "$MACOS_DEVELOPER_ID_APP" "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" SpermVerificationApp.zip
+          xcrun notarytool submit SpermVerificationApp.zip --apple-id "$MACOS_NOTARIZATION_APPLE_ID" --password "$MACOS_NOTARIZATION_PASSWORD" --team-id "$MACOS_TEAM_ID" --wait
+          xcrun stapler staple "$APP"
+      - name: Archive artifact
+        run: |
+          cd dist
+          ditto -c -k --sequesterRsrc --keepParent SpermVerificationApp.app SpermVerificationApp-macOS.zip
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpermVerificationApp-macOS
+          path: dist/SpermVerificationApp-macOS.zip
+
+
