@@ -123,13 +123,21 @@ jobs:
           source .venv/bin/activate
           # Constrain NumPy to <2 explicitly to avoid ABI issues during analysis
           pip install 'numpy<2' || true
-          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp --hidden-import PySide6.QtNetwork --collect-all PySide6 --collect-all PIL standalone_app/run_app.py
+          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp \
+            --hidden-import PySide6.QtNetwork \
+            --collect-data PySide6 \
+            --collect-all PIL \
+            standalone_app/run_app.py
       - name: Build with PyInstaller (Windows)
         if: ${{ runner.os == 'Windows' }}
         shell: pwsh
         run: |
           .\.venv\Scripts\Activate.ps1
-          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp --hidden-import PySide6.QtNetwork --collect-all PySide6 --collect-all PIL standalone_app/run_app.py
+          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp \
+            --hidden-import PySide6.QtNetwork \
+            --collect-data PySide6 \
+            --collect-all PIL \
+            standalone_app/run_app.py
 
       - name: Code sign (Windows)
         if: ${{ runner.os == 'Windows' && env.WIN_CERT_PFX != '' && env.WIN_CERT_PASSWORD != '' }}

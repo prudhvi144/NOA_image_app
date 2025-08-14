@@ -64,7 +64,11 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: |
           source .venv/bin/activate
-          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp --hidden-import PySide6.QtNetwork --collect-all PySide6 --collect-all PIL standalone_app/run_app.py
+          python -m PyInstaller --noconfirm --windowed --name SpermVerificationApp \
+            --hidden-import PySide6.QtNetwork \
+            --collect-data PySide6 \
+            --collect-all PIL \
+            standalone_app/run_app.py
       - name: Code sign + Notarize (macOS)
         if: ${{ env.MACOS_CERT_P12 != '' && env.MACOS_CERT_PASSWORD != '' && env.MACOS_DEVELOPER_ID_APP != '' && env.MACOS_TEAM_ID != '' && env.MACOS_NOTARIZATION_APPLE_ID != '' && env.MACOS_NOTARIZATION_PASSWORD != '' }}
         run: |
