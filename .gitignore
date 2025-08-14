@@ -1,33 +1,5 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-*.so
-
-# Virtual env
 .venv/
-
-# Build / packaging
 build/
 dist/
+__pycache__/
 *.spec
-
-# OS / IDE
-.DS_Store
-.idea/
-.vscode/
-
-# Qt cache
-*.qmlc
-*.jsc
-
-# Large data (do not commit raw datasets)
-*.tif
-*.tiff
-*.png
-*.jpg
-*.jpeg
-sperm_classified_preds*.json
-
-# Logs
-*.log

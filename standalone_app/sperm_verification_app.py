@@ -573,6 +573,7 @@ class SpermVerificationApp(QMainWindow):
         self.current_detections: List[dict] = []
         self.confirmed_detections: set = set()
         self.data_root_path: str = ""  # User-specified root path for data
+        self.image_lookup_cache: Dict[str, str] = {}  # basename -> resolved path cache
         
         # Click timing tracking
         self.click_timestamps: dict = {}  # detection_id -> timestamp
@@ -672,7 +673,10 @@ class SpermVerificationApp(QMainWindow):
         viewfinder_layout.addWidget(self.coords_label)
         
         content_splitter.addWidget(viewfinder_frame)
-        content_splitter.setSizes([350, 1550])  # Even more space for full image view
+        # Give the grid enough initial width to display 6 columns without overshooting
+        content_splitter.setSizes([880, 880])
+        content_splitter.setStretchFactor(0, 3)  # grid
+        content_splitter.setStretchFactor(1, 5)  # viewfinder
         
         main_layout.addWidget(content_splitter)
         
@@ -740,6 +744,8 @@ class SpermVerificationApp(QMainWindow):
         self.threshold_spinbox.setValue(0.5)  # Default threshold
         self.threshold_spinbox.setDecimals(2)
         self.threshold_spinbox.setToolTip("Minimum confidence threshold for displaying detections")
+        # Ensure black text in the confidence input
+        self.threshold_spinbox.setStyleSheet("color: black;")
         # Don't connect automatic change handler to prevent loops
         layout.addWidget(self.threshold_spinbox)
         
@@ -786,98 +792,72 @@ class SpermVerificationApp(QMainWindow):
         about_action.triggered.connect(self.show_about)
     
     def load_annotations(self):
-        """Load annotations from JSON file."""
-        # First, let user choose the root data directory
-        root_dir = QFileDialog.getExistingDirectory(
-            self, "Select Root Data Directory (where your images are located)", 
-            str(APP_DIRECTORY) if APP_DIRECTORY else str(Path.home())
-        )
-        
-        if not root_dir:
-            return
-        
-        # Store the root directory
-        self.data_root_path = root_dir
-        
-        # Now let user choose the JSON file
+        """Load annotations from JSON file (single dialog)."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load Annotations JSON File", 
-            root_dir, 
+            self,
+            "Load Annotations JSON File",
+            str(APP_DIRECTORY) if APP_DIRECTORY else str(Path.home()),
             "JSON Files (*.json)"
         )
-        
         if not file_path:
             return
-        
         try:
+            # Set JSON path and data root to the JSON's folder
+            self.json_file_path = file_path
+            self.data_root_path = str(Path(file_path).parent)
+
             with open(file_path, 'r') as f:
                 self.annotations_data = json.load(f)
-            
-            # Store the JSON file path for resolving relative image paths
-            self.json_file_path = file_path
+
             self.process_annotations()
             self.update_ui_state()
-            # Enable filter button now that data is loaded
             self.apply_filter_btn.setEnabled(True)
             self.status_label.setText(f"Loaded {len(self.current_detections)} detections")
-            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load annotations:\n{str(e)}")
     
     def load_real_data(self):
-        """Load data file with file dialog."""
-        # First, let user choose the root data directory
-        root_dir = QFileDialog.getExistingDirectory(
-            self, "Select Root Data Directory (where keyence_vs_cephla_keyence folder is located)", 
-            str(APP_DIRECTORY) if APP_DIRECTORY else str(Path.home())
-        )
-        
-        if not root_dir:
-            return
-        
-        # Store the root directory
-        self.data_root_path = root_dir
-        
-        # Now let user choose the JSON file
+        """Load data file (single JSON dialog only)."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Load JSON Annotations File", 
-            root_dir, 
+            self,
+            "Load JSON Annotations File",
+            str(APP_DIRECTORY) if APP_DIRECTORY else str(Path.home()),
             "JSON Files (*.json)"
         )
-        
         if not file_path:
             return
-        
+
         # Disable button and show loading status
         self.load_real_data_btn.setEnabled(False)
         self.load_real_data_btn.setText("⏳ Loading...")
         self.status_label.setText("Loading data file...")
-        QApplication.processEvents()  # Update UI immediately
-        
+        QApplication.processEvents()
+
         try:
-            # Load JSON with progress feedback
+            # Set JSON path and data root to the JSON's folder
+            self.json_file_path = file_path
+            self.data_root_path = str(Path(file_path).parent)
+
             self.status_label.setText("Reading JSON file...")
             QApplication.processEvents()
-            
             with open(file_path, 'r') as f:
                 self.annotations_data = json.load(f)
-            
-            # Store the JSON file path for resolving relative image paths
-            self.json_file_path = file_path
-            
+
             self.status_label.setText("Processing detections...")
             QApplication.processEvents()
-            
+
             self.process_annotations()
             self.update_ui_state()
-            
+
             # Re-enable button and enable filter
             self.load_real_data_btn.setEnabled(True)
             self.load_real_data_btn.setText("🔬 Load Data")
             self.apply_filter_btn.setEnabled(True)
-            
-            self.status_label.setText(f"✅ Loaded {len(self.current_detections)} detections from {len(self.annotations_data)} images")
-            
+
+            self.status_label.setText(
+                f"✅ Loaded {len(self.current_detections)} detections from {len(self.annotations_data)} images"
+            )
+
         except Exception as e:
             # Re-enable button on error
             self.load_real_data_btn.setEnabled(True)
@@ -943,37 +923,42 @@ class SpermVerificationApp(QMainWindow):
         self.populate_grid()
     
     def resolve_image_path(self, image_path: str, json_dir: Path) -> str:
-        """Resolve image path using user-provided root directory."""
+        """Resolve image path relative to JSON directory with robust fallbacks.
+        Supports layouts like: json_dir/some_folder_name/images/filename.ext
+        """
         img_path = Path(image_path)
-        
-        # If user provided a root path, use that as the base
-        if self.data_root_path:
-            root_path = Path(self.data_root_path)
-            
-            # If path is already absolute and exists, use it
-            if img_path.is_absolute() and img_path.exists():
-                return str(img_path)
-            
-            # Try resolving relative to user's root directory
-            if image_path.startswith('./'):
-                resolved = root_path / image_path[2:]  # Remove ./
-            else:
-                resolved = root_path / image_path
-            
-            if resolved.exists():
-                return str(resolved)
-        
-        # Fallback to original logic if no root path or file not found
-        # If path is already absolute and exists, use it
+
+        # 0) Absolute path that exists
         if img_path.is_absolute() and img_path.exists():
             return str(img_path)
-        
-        # Try resolving relative to JSON directory
-        resolved = json_dir / image_path
-        if resolved.exists():
-            return str(resolved)
-        
-        # If nothing works, return original path (will show error when loading)
+
+        basename = img_path.name
+
+        # 1) Base root: user-chosen root if set, else the JSON's directory
+        root = Path(self.data_root_path) if self.data_root_path else json_dir
+
+        # 2) Try original relative path rebased to root (handles './...')
+        rebased = (root / image_path.lstrip("./")).resolve()
+        if rebased.exists():
+            return str(rebased)
+
+        # 3) Cached lookup by basename
+        cached = self.image_lookup_cache.get(basename)
+        if cached and Path(cached).exists():
+            return cached
+
+        # 4) Prefer matches inside an 'images' directory under root
+        for p in root.rglob(basename):
+            if p.parent.name.lower() == "images":
+                self.image_lookup_cache[basename] = str(p)
+                return str(p)
+
+        # 5) Fallback: any basename match under root
+        for p in root.rglob(basename):
+            self.image_lookup_cache[basename] = str(p)
+            return str(p)
+
+        # 6) Give up: return original path (will error on load)
         return image_path
 
     def apply_confidence_filter(self):
