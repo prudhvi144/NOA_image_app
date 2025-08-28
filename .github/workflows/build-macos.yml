@@ -92,10 +92,12 @@ jobs:
         run: |
           cd dist
           ditto -c -k --sequesterRsrc --keepParent SpermVerificationApp.app SpermVerificationApp-macOS.zip
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload release asset (bypass Actions artifact storage)
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: SpermVerificationApp-macOS
-          path: dist/SpermVerificationApp-macOS.zip
+          files: dist/SpermVerificationApp-macOS.zip
 
 
