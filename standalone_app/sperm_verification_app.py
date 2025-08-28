@@ -900,27 +900,52 @@ class SpermVerificationApp(QMainWindow):
                         }
                         self.current_detections.append(detection_data)
             else:
-                # Real data format: pred_boxes and pred_scores
+                # Real data format: pred_boxes, pred_scores, and pred_labels
                 pred_boxes = image_entry.get("pred_boxes", [])
                 pred_scores = image_entry.get("pred_scores", [])
-                
-                for i, (bbox, score) in enumerate(zip(pred_boxes, pred_scores)):
-                    # Apply confidence threshold filter
-                    threshold = getattr(self, 'threshold_spinbox', None)
-                    min_confidence = threshold.value() if threshold else 0.5
-                    
-                    if score >= min_confidence:
-                        detection_id = f"{Path(image_path).name}_{i}"
-                        detection_data = {
-                            "id": detection_id,
-                            "image_path": resolved_image_path,
-                            "bbox": bbox,  # bbox is already [x1, y1, x2, y2]
-                            "confidence": score,
-                            "cell_id": f"sperm_{i+1}"
-                        }
-                        self.current_detections.append(detection_data)
+                pred_labels = image_entry.get("pred_labels", None)
+
+                # Apply confidence threshold filter
+                threshold = getattr(self, 'threshold_spinbox', None)
+                min_confidence = threshold.value() if threshold else 0.5
+
+                # Use helper to pick indices to include (label==1 only when labels exist)
+                include_indices = self.filter_label_one_detections(
+                    pred_boxes, pred_scores, pred_labels, min_confidence
+                )
+
+                for i in include_indices:
+                    bbox = pred_boxes[i]
+                    score = pred_scores[i] if i < len(pred_scores) else 0.0
+                    detection_id = f"{Path(image_path).name}_{i}"
+                    detection_data = {
+                        "id": detection_id,
+                        "image_path": resolved_image_path,
+                        "bbox": bbox,
+                        "confidence": score,
+                        "cell_id": f"sperm_{i+1}"
+                    }
+                    self.current_detections.append(detection_data)
         
         self.populate_grid()
+
+    def filter_label_one_detections(self, pred_boxes: list, pred_scores: list, pred_labels: Optional[list], min_confidence: float) -> list:
+        """Return indices of detections to include before plotting.
+
+        - If labels are available, include only label==1 with score >= threshold.
+        - If labels are missing or mismatched, fall back to confidence-only filtering.
+        """
+        # Guard against empty inputs
+        if not pred_boxes:
+            return []
+
+        if pred_labels is None or len(pred_labels) != len(pred_boxes):
+            return [i for i, score in enumerate(pred_scores) if score >= min_confidence]
+
+        return [
+            i for i, (score, label) in enumerate(zip(pred_scores, pred_labels))
+            if label == 1 and score >= min_confidence
+        ]
     
     def resolve_image_path(self, image_path: str, json_dir: Path) -> str:
         """Resolve image path relative to JSON directory with robust fallbacks.
